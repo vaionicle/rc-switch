@@ -30,6 +30,7 @@
 #ifndef _RCSwitch_h
 #define _RCSwitch_h
 
+
 #if defined(ARDUINO) && ARDUINO >= 100
 	#include "Arduino.h"
 #elif defined(ENERGIA) // LaunchPad, FraunchPad and StellarPad specific
@@ -48,6 +49,7 @@
 #endif
 
 #include <stdint.h>
+#include "Protocol.h"
 
 
 // At least for the ATTiny X4/X5, receiving has to be disabled due to
