@@ -1,5 +1,7 @@
 # rc-switch
 
+Fork of [RC-SWITCH by @sui77](https://github.com/sui77/rc-switch)
+
 [![arduino-library-badge](https://www.ardu-badge.com/badge/rc-switch.svg?)](https://www.ardu-badge.com/rc-switch)
 [![Build Status](https://app.travis-ci.com/vaionicle/rc-switch.svg?branch=master)](https://app.travis-ci.com/vaionicle/rc-switch)
 
