@@ -5,7 +5,7 @@
   
 */
 
-#include <RCSwitch.h>
+#include <src/RCSwitch.h>
 
 RCSwitch mySwitch = RCSwitch();
 

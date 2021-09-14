@@ -4,7 +4,7 @@
   https://github.com/sui77/rc-switch/
 */
 
-#include <RCSwitch.h>
+#include <src/RCSwitch.h>
 
 RCSwitch mySwitch = RCSwitch();
 
