@@ -1,7 +1,7 @@
 # rc-switch
 
 [![arduino-library-badge](https://www.ardu-badge.com/badge/rc-switch.svg?)](https://www.ardu-badge.com/rc-switch)
-[![Build Status](https://travis-ci.org/vaionicle/rc-switch.svg?branch=master)](https://travis-ci.org/vaionicle/rc-switch)
+[![Build Status](https://app.travis-ci.com/vaionicle/rc-switch.svg?branch=master)](https://app.travis-ci.com/vaionicle/rc-switch)
 
 Use your Arduino or [Raspberry Pi](https://github.com/r10r/rcswitch-pi) to operate remote radio controlled devices
 
