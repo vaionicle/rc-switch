@@ -34,6 +34,7 @@
 
 #include "RCSwitch.h"
 #include "Protocol.h"
+#include "Keyloq.h"
 
 #ifdef RaspberryPi
 	// PROGMEM and _P functions are for AVR based microprocessors,
@@ -56,22 +57,24 @@
 #endif
 
 #if not defined( RCSwitchDisableReceiving )
-	volatile unsigned long RCSwitch::nReceivedValue = 0;
+	volatile unsigned long long RCSwitch::nReceivedValue = 0;
 	volatile unsigned int RCSwitch::nReceivedBitlength = 0;
 	volatile unsigned int RCSwitch::nReceivedDelay = 0;
 	volatile unsigned int RCSwitch::nReceivedProtocol = 0;
 	int RCSwitch::nReceiveTolerance = 60;
-	const unsigned int VAR_ISR_ATTR RCSwitch::nSeparationLimit = 4300;
 
 	// separationLimit: minimum microseconds between received codes, closer codes are ignored.
 	// according to discussion on issue #14 it might be more suitable to set the separation
 	// limit to the same time as the 'low' part of the sync signal for the current protocol.
+	const unsigned int VAR_ISR_ATTR RCSwitch::nSeparationLimit = 2600;
+
 	unsigned int RCSwitch::timings[RCSWITCH_MAX_CHANGES];
+	unsigned int RCSwitch::buftimings[4];
 #endif
 
 RCSwitch::RCSwitch() {
 	this->nTransmitterPin = -1;
-	this->setRepeatTransmit(10);
+	this->setRepeatTransmit(5);
 	this->setProtocol(1);
 	#if not defined( RCSwitchDisableReceiving )
 		this->nReceiverInterrupt = -1;
@@ -110,6 +113,12 @@ void RCSwitch::setProtocol(int nProtocol, int nPulseLength) {
 	this->setPulseLength(nPulseLength);
 }
 
+/**
+  * Get the number of supported protocols (maximum index)
+  */
+const int RCSwitch::getNumProtocols(void) {
+  return numProto;
+}
 
 /**
   * Sets pulse length in microseconds
@@ -412,21 +421,21 @@ char* RCSwitch::getCodeWordD(char sGroup, int nDevice, bool bStatus) {
  */
 void RCSwitch::sendTriState(const char* sCodeWord) {
 	// turn the tristate code word into the corresponding bit pattern, then send it
-	unsigned long code = 0;
+	unsigned long long code = 0;
 	unsigned int length = 0;
 	for (const char* p = sCodeWord; *p; p++) {
-		code <<= 2L;
+		code <<= 2ULL;
 		switch (*p) {
 		case '0':
 			// bit pattern 00
 			break;
 		case 'F':
 			// bit pattern 01
-			code |= 1L;
+			code |= 1ULL;
 			break;
 		case '1':
 			// bit pattern 11
-			code |= 3L;
+			code |= 3ULL;
 			break;
 		}
 		length += 2;
@@ -435,16 +444,36 @@ void RCSwitch::sendTriState(const char* sCodeWord) {
 }
 
 /**
+ * @param duration   no. of microseconds to delay
+ */
+static inline void safeDelayMicroseconds(unsigned long duration) {
+	#if defined(ESP8266) || defined(ESP32)
+		if (duration > 10000) {
+			// if delay > 10 milliseconds, use yield() to avoid wdt reset
+			unsigned long start = micros();
+			while ((micros() - start) < duration) {
+				yield();
+			}
+		}
+		else {
+			delayMicroseconds(duration);
+		}
+	#else
+		delayMicroseconds(duration);
+	#endif
+}
+
+/**
  * @param sCodeWord   a binary code word consisting of the letter 0, 1
  */
 void RCSwitch::send(const char* sCodeWord) {
 	// turn the tristate code word into the corresponding bit pattern, then send it
-	unsigned long code = 0;
+	unsigned long long code = 0;
 	unsigned int length = 0;
 	for (const char* p = sCodeWord; *p; p++) {
-		code <<= 1L;
+		code <<= 1ULL;
 		if (*p != '0')
-			code |= 1L;
+			code |= 1ULL;
 		length++;
 	}
 	this->send(code, length);
@@ -467,14 +496,46 @@ void RCSwitch::send(unsigned long code, unsigned int length) {
 		}
 	#endif
 
+	// repeat sending the packet nRepeatTransmit times
 	for (int nRepeat = 0; nRepeat < nRepeatTransmit; nRepeat++) {
-		for (int i = length-1; i >= 0; i--) {
-		if (code & (1L << i))
-			this->transmit(protocol.one);
-		else
-			this->transmit(protocol.zero);
+
+		// we send the preamble (meander)
+		for (int i = 0; i < ((protocol.PreambleFactor / 2) + (protocol.PreambleFactor %2 )); i++) {
+			this->transmit({protocol.Preamble.high, protocol.Preamble.low});
 		}
-		this->transmit(protocol.syncFactor);
+
+		// we send the header
+		if (protocol.HeaderFactor > 0) {
+			for (int i = 0; i < protocol.HeaderFactor; i++) {
+				this->transmit(protocol.Header);
+			}
+		}
+
+		// we send the parcel code
+		for (int i = length - 1; i >= 0; i--) {
+			if (code & (1ULL << i))
+				this->transmit(protocol.one);
+			else
+				this->transmit(protocol.zero);
+		}
+
+		// for a kiloka, there should be a duration of 66, and 64
+		// significant data codes are stored, so let's send two more bits for even counting
+		if (length == 64) {
+			if (nRepeat == 0) {
+				this->transmit(protocol.zero);
+				this->transmit(protocol.zero);
+			} else {
+				this->transmit(protocol.one);
+				this->transmit(protocol.one);
+			}
+		}
+
+		// we maintain Guard Time
+		if (protocol.Guard > 0) {
+			digitalWrite(this->nTransmitterPin, LOW);
+			safeDelayMicroseconds(this->protocol.pulseLength * protocol.Guard);
+		}
 	}
 
 	// Disable transmit after sending (i.e., for inverted protocols)
@@ -495,10 +556,14 @@ void RCSwitch::transmit(HighLow pulses) {
 	uint8_t firstLogicLevel = (this->protocol.invertedSignal) ? LOW : HIGH;
 	uint8_t secondLogicLevel = (this->protocol.invertedSignal) ? HIGH : LOW;
 	
-	digitalWrite(this->nTransmitterPin, firstLogicLevel);
-	delayMicroseconds( this->protocol.pulseLength * pulses.high);
-	digitalWrite(this->nTransmitterPin, secondLogicLevel);
-	delayMicroseconds( this->protocol.pulseLength * pulses.low);
+	if (pulses.high > 0) {
+		digitalWrite(this->nTransmitterPin, firstLogicLevel);
+		delayMicroseconds( this->protocol.pulseLength * pulses.high);
+	}
+	if (pulses.low > 0) {
+		digitalWrite(this->nTransmitterPin, secondLogicLevel);
+		delayMicroseconds( this->protocol.pulseLength * pulses.low);
+	}
 }
 
 
@@ -543,7 +608,7 @@ void RCSwitch::resetAvailable() {
 	RCSwitch::nReceivedValue = 0;
 }
 
-unsigned long RCSwitch::getReceivedValue() {
+unsigned long long RCSwitch::getReceivedValue() {
 	return RCSwitch::nReceivedValue;
 }
 
@@ -579,13 +644,49 @@ bool RECEIVE_ATTR RCSwitch::receiveProtocol(const int p, unsigned int changeCoun
 		memcpy_P(&pro, &proto[p-1], sizeof(Protocol));
 	#endif
 
-	unsigned long code = 0;
+	unsigned long long code = 0;
+	unsigned int FirstTiming = 0;
 
-	//Assuming the longer pulse length is the pulse captured in timings[0]
-	const unsigned int syncLengthInPulses =  ((pro.syncFactor.low) > (pro.syncFactor.high)) ? (pro.syncFactor.low) : (pro.syncFactor.high);
-	const unsigned int delay = RCSwitch::timings[0] / syncLengthInPulses;
+	if (pro.PreambleFactor > 0) {
+		FirstTiming = pro.PreambleFactor + 1;
+	}
+
+
+	unsigned int BeginData = 0;
+	if (pro.HeaderFactor > 0) {
+		BeginData = (pro.invertedSignal) ? (2) : (1);
+		// correction for the number of impulses in the Heder for more than one
+		if (pro.HeaderFactor > 1) {
+			BeginData += (pro.HeaderFactor - 1) * 2;
+		}
+	}
+
+	// Assuming the longer pulse length is the pulse captured in timings[FirstTiming]
+	// take the largest value from Header
+	const unsigned int syncLengthInPulses =  ((pro.Header.low) > (pro.Header.high)) ? (pro.Header.low) : (pro.Header.high);
+
+	// define the duration Te as the duration of the first header pulse divided by the number of pulses in it
+	// or as the duration of the preamble pulse divided by the amount of Te in it
+	unsigned int sDelay = 0;
+	if (syncLengthInPulses > 0) {
+		sDelay = RCSwitch::timings[FirstTiming] / syncLengthInPulses;
+	} else {
+		sDelay = RCSwitch::timings[FirstTiming-2] / pro.PreambleFactor;
+	}
+
+	const unsigned int delay = sDelay;
+	// nReceiveTolerance = 60
+	// permissible deviation of pulse durations by 60%
+
 	const unsigned int delayTolerance = delay * RCSwitch::nReceiveTolerance / 100;
 	
+
+	// 0 - sync before preamble or data
+	// BeginData - shift 1 or 2 from sync to preamble / data
+	// FirstTiming - shift on preamble to header
+	// firstDataTiming first impulse data
+	// bitChangeCount - number of pulses in data
+
 	/* For protocols that start low, the sync period looks like
 	 *               _________
 	 * _____________|         |XXXXXXXXXXXX|
@@ -603,15 +704,22 @@ bool RECEIVE_ATTR RCSwitch::receiveProtocol(const int p, unsigned int changeCoun
 	 *
 	 * The 2nd saved duration starts the data
 	 */
-	const unsigned int firstDataTiming = (pro.invertedSignal) ? (2) : (1);
 
-	for (unsigned int i = firstDataTiming; i < changeCount - 1; i += 2) {
+	// if invertedSignal = false, then the signal starts from 1 array element (high level)
+	// if invertedSignal = true, then the signal starts from 2 array elements (low level)
+	// adding an amendment to the Preamble and Header
+	const unsigned int firstDataTiming = BeginData + FirstTiming;
+	unsigned int bitChangeCount = changeCount - firstDataTiming - 1 + pro.invertedSignal;
+
+	if (bitChangeCount > 128) {
+		bitChangeCount = 128;
+	}
+
+	for (unsigned int i = firstDataTiming; i < firstDataTiming + bitChangeCount; i += 2) {
 		code <<= 1;
-		if (diff(RCSwitch::timings[i], delay * pro.zero.high) < delayTolerance &&
-			diff(RCSwitch::timings[i + 1], delay * pro.zero.low) < delayTolerance) {
+		if (diff(RCSwitch::timings[i], delay * pro.zero.high) < delayTolerance && diff(RCSwitch::timings[i + 1], delay * pro.zero.low) < delayTolerance) {
 			// zero
-		} else if (diff(RCSwitch::timings[i], delay * pro.one.high) < delayTolerance &&
-				   diff(RCSwitch::timings[i + 1], delay * pro.one.low) < delayTolerance) {
+		} else if (diff(RCSwitch::timings[i], delay * pro.one.high) < delayTolerance && diff(RCSwitch::timings[i + 1], delay * pro.one.low) < delayTolerance) {
 			// one
 			code |= 1;
 		} else {
@@ -620,11 +728,12 @@ bool RECEIVE_ATTR RCSwitch::receiveProtocol(const int p, unsigned int changeCoun
 		}
 	}
 
-	if (changeCount > 7) {    // ignore very short transmissions: no device sends them, so this must be noise
+	if (bitChangeCount > 14) {    // ignore very short transmissions: no device sends them, so this must be noise
 		RCSwitch::nReceivedValue = code;
-		RCSwitch::nReceivedBitlength = (changeCount - 1) / 2;
+		RCSwitch::nReceivedBitlength = bitChangeCount / 2;
 		RCSwitch::nReceivedDelay = delay;
 		RCSwitch::nReceivedProtocol = p;
+
 		return true;
 	}
 
@@ -635,32 +744,69 @@ void RECEIVE_ATTR RCSwitch::handleInterrupt() {
 
 	static unsigned int changeCount = 0;
 	static unsigned long lastTime = 0;
-	static unsigned int repeatCount = 0;
+	static byte repeatCount = 0;
 
 	const long time = micros();
 	const unsigned int duration = time - lastTime;
 
-	if (duration > RCSwitch::nSeparationLimit) {
+	RCSwitch::buftimings[3]=RCSwitch::buftimings[2];
+	RCSwitch::buftimings[2]=RCSwitch::buftimings[1];
+	RCSwitch::buftimings[1]=RCSwitch::buftimings[0];
+	RCSwitch::buftimings[0]=duration;
+
+	// a long pulse with a duration of more than nSeparationLimit (4100) is received
+	if (duration > RCSwitch::nSeparationLimit ||
+		changeCount == 156 ||
+		(diff(RCSwitch::buftimings[3], RCSwitch::buftimings[2]) < 50 &&
+		diff(RCSwitch::buftimings[2], RCSwitch::buftimings[1]) < 50 &&
+		changeCount > 25)) {
+
 		// A long stretch without signal level change occurred. This could
 		// be the gap between two transmission.
-		if ((repeatCount==0) || (diff(duration, RCSwitch::timings[0]) < 200)) {
+		if (diff(duration, RCSwitch::timings[0]) < 400 ||
+			changeCount == 156 ||
+			(diff(RCSwitch::buftimings[3], RCSwitch::timings[1]) < 50 &&
+			diff(RCSwitch::buftimings[2], RCSwitch::timings[2]) < 50 &&
+			diff(RCSwitch::buftimings[1], RCSwitch::timings[3]) < 50 &&
+			changeCount > 25)) {
+
+			// if its duration differs from the first pulse,
+			// which was accepted earlier, less than + -200 (initially 200)
+			// then we consider it a duplicate packet and ignore it
+
 			// This long signal is close in length to the long signal which
 			// started the previously recorded timings; this suggests that
 			// it may indeed by a a gap between two transmissions (we assume
 			// here that a sender will send the signal multiple times,
 			// with roughly the same gap between them).
+
+			// number of retry packets
 			repeatCount++;
-			if (repeatCount == 2) {
+
+			// when receiving the second re-start the analysis of the received first
+			if (repeatCount == 1) {
 				for (unsigned int i = 1; i <= numProto; i++) {
 					if (receiveProtocol(i, changeCount)) {
 						// receive succeeded for protocol i
 						break;
 					}
 				}
+
+				// we clean number of retry packets
 				repeatCount = 0;
 			}
 		}
+
+		// the duration differs by more than + -200 from the first
+		// received earlier, clear the counter to receive a new packet
 		changeCount = 0;
+		if (diff(RCSwitch::buftimings[3], RCSwitch::buftimings[2]) < 50 &&
+			diff(RCSwitch::buftimings[2], RCSwitch::buftimings[1]) < 50) {
+			RCSwitch::timings[1]=RCSwitch::buftimings[3];
+			RCSwitch::timings[2]=RCSwitch::buftimings[2];
+			RCSwitch::timings[3]=RCSwitch::buftimings[1];
+			changeCount = 4;
+		}
 	}
 	
 	// detect overflow
@@ -669,7 +815,14 @@ void RECEIVE_ATTR RCSwitch::handleInterrupt() {
 		repeatCount = 0;
 	}
 
-	RCSwitch::timings[changeCount++] = duration;
+	// enter the duration of the next received pulse into the array
+	if (changeCount > 0 && duration < 100) { // ignore noise spikes less than 100 μs
+		RCSwitch::timings[changeCount-1] += duration;
+	} else {
+		RCSwitch::timings[changeCount++] = duration;
+	}
+
 	lastTime = time;  
 }
+
 #endif

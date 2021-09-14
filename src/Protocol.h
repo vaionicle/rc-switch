@@ -20,9 +20,10 @@
  *    Inverted Signal,
  *    Guard time
  * }
- * 
+ *
  * Pulse length: pulse duration (Te) in microseconds,
  *               for example 350
+ * 
  * PreambleFactor: Number of high and low states to send
  *                 (One pulse = 2 states, in orther words, number of pulses is
  *                 ceil(PreambleFactor/2).)
@@ -30,28 +31,29 @@
  *           Sent ceil(PreambleFactor/2) times.
  *           For example, {1, 2} with factor 3 would send
  *      _    _   
- *     | |__| |__         (each horizontal bar has a duration of Te,
- *                         vertical bars are ignored)
+ *     | |__| |__  (each horizontal bar has a duration of Te, vertical bars are ignored)
+ * 
  * HeaderFactor: Number of times to send the header pulse.
  * Header: Pulse shape which defines a header (or "sync"/"clock") pulse.
  *           {1, 31} means one pulse of duration 1 Te high and 31 Te low
  *      _
  *     | |_______________________________ (don't count the vertical bars)
- * 
+ *
  * "0" bit: pulse shape defining a data bit, which is a logical "0"
  *          {1, 3} means 1 pulse duration Te high level and 3 low
  *      _
  *     | |___
- * 
+ *
  * "1" bit: pulse shape that defines the data bit, which is a logical "1"
  *          {3, 1} means 3 pulses with a duration of Te high level and 1 low
  *      ___
  *     |   |_
  *
  * (note: to form the state bit Z (Tri-State bit), two codes are combined)
- * 
+ *
  * Inverted Signal: Signal inversion - if true the signal is inverted
  *                  replacing high to low in a transmitted / received packet
+ *
  * Guard time: Separation time between two retries. It will be followed by the 
  *             next preamble of the next packet. In number of Te.
  *             e.g. 39 pulses of duration Te low level
@@ -96,10 +98,12 @@ struct Protocol {
 	 * But some devices do it the other way around, and start with a low
 	 * signal level, followed by a high signal level, e.g. the HT6P20B. To
 	 * accommodate this, one can set invertedSignal to true, which causes
-	 * RCSwitch to change how it interprets any HighLow struct FOO: It will
-	 * then assume transmissions start with a low signal lasting
-	 * FOO.high*pulseLength microseconds, followed by a high signal lasting
-	 * FOO.low*pulseLength microseconds.
+	 * RCSwitch to change how it interprets any HighLow struct
+	 * 
+	 * FOO: It will then assume transmissions start with a low signal lasting
+	 *
+	 * FOO.high * pulseLength microseconds, followed by a high signal lasting
+	 * FOO.low  * pulseLength microseconds.
 	 */
 	bool invertedSignal;
 
@@ -138,7 +142,6 @@ struct Protocol {
 	{ 560,  0, { 0, 0 }, 1, {  16,  8 }, { 1,  1 }, { 1, 3 }, false,  0 }, // 25 (NEC)
 	{ 385,  0, { 0, 0 }, 1, {   1, 17 }, { 1,  2 }, { 2, 1 }, false,  0 }, // 26 (Arlec RC210)
 	{ 188,  0, { 0, 0 }, 1, {   1, 31 }, { 1,  3 }, { 3, 1 }, false,  0 }, // 27 (Zap, FHT-7901)
-
 	{ 700,  1, { 0, 1 }, 1, { 116,  0 }, { 1,  2 }, { 2, 1 }, true,   0 }, // 28 (Quigg GT-7000) from @Tho85 https://github.com/sui77/rc-switch/pull/115
 	{ 220,  0, { 0, 0 }, 1, {   1, 46 }, { 1,  6 }, { 1, 1 }, false,  2 }, // 29 (NEXA)
 	{ 260,  0, { 0, 0 }, 1, {   1,  8 }, { 1,  4 }, { 4, 1 }, true,   0 }, // 30 (Anima)
