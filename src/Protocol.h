@@ -150,7 +150,20 @@ struct Protocol {
 	{ 365,  0, { 0, 0 }, 1, {  18,  1 }, { 3,  1 }, { 1, 3 }, true,   0 }, // 32 (1ByOne Doorbell) from @Fatbeard https://github.com/sui77/rc-switch/pull/277
 	{ 340,  0, { 0, 0 }, 1, {  14,  4 }, { 1,  2 }, { 2, 1 }, false,  0 }, // 33 (Dooya Control DC2708L)
 	{ 120,  0, { 0, 0 }, 1, {   1, 28 }, { 1,  3 }, { 3, 1 }, false,  0 }, // 34 DIGOO SD10
-	{ 275,  0, { 0, 0 }, 1, {   1, 10 }, { 1,  1 }, { 1, 5 }, false, 37 }  // 35 (SmartWares/HomeEasy)
+	{ 275,  0, { 0, 0 }, 1, {   1, 10 }, { 1,  1 }, { 1, 5 }, false, 37 }, // 35 (SmartWares/HomeEasy)
+	{  16,  0, { 0, 0 }, 1, {  59, 19 }, { 4, 10 }, { 9, 3 }, false,  0 }  // 36 BREL Motor Blinds (DC-104)
+
+	// { 300,  0, { 1, 33 }, { 1, 1 }, { 1, 4 }, { 1, 9 }, false, 0 }, // protocol 8 Home easy
+	// {200, {3, 130}, {7, 16}, {3, 16}, false}, // protocol 8 Conrad RS-200 RX
+	// {200, {130, 7}, {16, 7}, {16, 3}, true},  // protocol 9 Conrad RS-200 TX
+	// {365, {18, 1}, {3, 1}, {1, 3}, true},     // protocol 10 (1ByOne Doorbell)
+	// {270, {36, 1}, {1, 2}, {2, 1}, true},     // protocol 11 (HT12E)
+	// {320, {36, 1}, {1, 2}, {2, 1}, true}      // protocol 12 (SM5212)
+	// { 300, { 1, 19  }, {  1,  3 }, {  3,  1 }, false},     // protocol 13 (ft1211r, fan motor)
+	// { 520, { 17, 1  }, {  7,  1 }, {  3,  1 }, true},      // protocol 14
+	// //{ 520, { 16, 1  }, {  3,  1 }, {  7,  1 }, false}      // protocol 15
+	// { 150, {  1, 31 }, {  1,  3 }, {  3,  1 }, false }     // protocol 8 (FHT-7901, uses type E encoding hence different from protocol 1)
+	// { 365, { 18,  1 }, {  3,  1 }, {  1,  3 }, true },     // protocol 10 (1ByOne Doorbell)
 };
 
 enum {
