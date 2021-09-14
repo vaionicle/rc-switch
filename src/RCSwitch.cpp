@@ -443,6 +443,35 @@ void RCSwitch::sendTriState(const char* sCodeWord) {
 	this->send(code, length);
 }
 
+void RCSwitch::sendQuadState(const char* sCodeWord) {
+
+	// turn the tristate code word into the corresponding bit pattern, then send it
+	unsigned long long code = 0;
+	unsigned int length = 0;
+
+	for (const char* p = sCodeWord; *p; p++) {
+		code <<= 2ULL;
+		switch (*p) {
+		case '0':
+			// bit pattern 00
+			break;
+		case 'F':
+			// bit pattern 01
+			code |= 1ULL;
+			break;
+		case '1':
+			// bit pattern 11
+			code |= 3ULL;
+			break;
+		case 'Q':
+			// bit pattern 10
+			code |= 2ULL;
+			break;
+		}
+		length += 2;
+	}
+	this->send(code, length);
+}
 /**
  * @param duration   no. of microseconds to delay
  */

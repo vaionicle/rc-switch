@@ -61,7 +61,7 @@
 // Number of maximum high/Low changes per packet.
 // We can handle up to (unsigned long) => 32 bit * 2 H/L changes per bit + 2 for sync
 // For keeloq you need to increase RCSWITCH_MAX_CHANGES to 23 + 1 + (66 * 2) + 1 = 157
-#define RCSWITCH_MAX_CHANGES 67
+#define RCSWITCH_MAX_CHANGES 135  // default 67 = 32bit --- 135 = 32bit
 
 class RCSwitch {
 
@@ -80,6 +80,7 @@ class RCSwitch {
 		void switchOff(char sGroup, int nDevice);
 
 		void sendTriState(const char* sCodeWord);
+		void sendQuadState(const char* sCodeWord);
 		void send(unsigned long long code, unsigned int length);
 		void send(const char* sCodeWord);
 		
