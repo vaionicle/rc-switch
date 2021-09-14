@@ -6,7 +6,7 @@
   Need help? http://forum.ardumote.com
 */
 
-#include <src/RCSwitch.h>
+#include <RCSwitch.h>
 
 RCSwitch mySwitch = RCSwitch();
 

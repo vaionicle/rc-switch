@@ -7,7 +7,7 @@
   paste it into http://test.sui.li/oszi/
 */
 
-#include <src/RCSwitch.h>
+#include <RCSwitch.h>
 
 RCSwitch mySwitch = RCSwitch();
 
